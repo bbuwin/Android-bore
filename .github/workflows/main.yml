@@ -21,24 +21,21 @@ jobs:
           target: google_apis
           arch: x86_64
           script: |
-            # Download VNC APK on the HOST machine (not inside emulator)
-            # The action runs this script on the host, adb commands go to emulator
-            
-            # Wait for emulator to be fully ready
+            # Wait for device
             adb wait-for-device
-            sleep 10
+            sleep 15
             
-            # Download VNC APK to host
+            # Download VNC APK (using working URL)
             wget -O vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
             
-            # Install from host to emulator
+            # Install VNC
             adb install vnc.apk
             
-            # Launch VNC server
+            # Launch VNC
             adb shell am start -n com.iiordanov.droidVNC/.MainActivity
             sleep 5
             
-            # Configure VNC password
+            # Configure password
             adb shell input tap 500 800
             sleep 1
             adb shell input text "vnc123"
@@ -47,25 +44,24 @@ jobs:
             sleep 1
             adb shell input tap 300 1000
             
-            echo "✅ VNC server running on port 5900"
+            echo "✅ VNC ready on port 5900"
             
-            # Keep emulator alive
+            # Keep alive
             while true; do sleep 300; done
 
-      - name: Setup Bore Tunnel
+      - name: Install Bore
         run: |
-          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          wget https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           chmod +x bore
-          
-          echo ""
+
+      - name: Start Bore Tunnel
+        run: |
           echo "========================================="
-          echo "✅ ANDROID EMULATOR READY"
+          echo "📱 ANDROID EMULATOR READY"
           echo "========================================="
-          echo "📡 Look for: listening at bore.pub:XXXXX"
           echo "🔑 VNC Password: vnc123"
           echo ""
-          echo "📱 Connect using VNC Viewer app"
+          echo "📡 Your Bore address:"
           echo "========================================="
-          
           ./bore local 5900 --to bore.pub
