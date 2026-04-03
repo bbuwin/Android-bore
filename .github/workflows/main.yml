@@ -1,64 +1,89 @@
-name: Android Emulator with Bore (F-Droid)
+name: Android Emulator + Bore Tunnel
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  emulator:
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+    timeout-minutes: 350
 
-      - name: Run Android Emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          script: |
-            # Wait for device
-            adb wait-for-device
-            sleep 15
-            
-            # Download VNC APK from F-Droid (official mirror)
-            wget -O vnc.apk "https://f-droid.org/repo/net.christianbeier.droidvnc_ng_2.9.3.apk"
-            
-            # Install VNC
-            adb install vnc.apk
-            
-            # Launch VNC
-            adb shell am start -n com.iiordanov.droidVNC/.MainActivity
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip curl libglu1-mesa
+
+      - name: Setup Android SDK
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk
+
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-*.zip -d cmdline-tools
+          mv cmdline-tools/cmdline-tools cmdline-tools/latest
+
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$HOME/android-sdk/emulator:$PATH" >> $GITHUB_ENV
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --update
+
+          sdkmanager \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-30" \
+            "system-images;android-30;google_apis;x86_64"
+
+      - name: Create AVD
+        run: |
+          echo "no" | avdmanager create avd \
+            -n test \
+            -k "system-images;android-30;google_apis;x86_64" \
+            --device "pixel"
+
+      - name: Start emulator
+        run: |
+          nohup emulator -avd test \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu off \
+            -accel off \
+            -netdelay none \
+            -netspeed full > emulator.log 2>&1 &
+
+          adb wait-for-device
+
+          echo "Waiting for full boot..."
+          boot_completed=""
+          until [[ "$boot_completed" == "1" ]]; do
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             sleep 5
-            
-            # Configure password
-            adb shell input tap 500 800
-            sleep 1
-            adb shell input text "vnc123"
-            sleep 1
-            adb shell input tap 500 900
-            sleep 1
-            adb shell input tap 300 1000
-            
-            echo "✅ VNC ready"
-            while true; do sleep 300; done
+          done
+
+          echo "Emulator booted!"
+
+          adb devices
+
+      - name: Enable ADB over TCP
+        run: |
+          adb tcpip 5555
+          sleep 3
+          adb connect localhost:5555
+          adb devices
 
       - name: Install Bore
         run: |
-          wget https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          curl -L https://github.com/ekzhang/bore/releases/download/v0.4.0/bore-v0.4.0-x86_64-unknown-linux-musl.tar.gz | tar xz
           chmod +x bore
 
-      - name: Start Bore Tunnel
+      - name: Start Bore tunnel
         run: |
-          echo "========================================="
-          echo "📱 ANDROID EMULATOR READY"
-          echo "========================================="
-          echo "🔑 VNC Password: vnc123"
-          echo "📡 Bore address will appear below:"
-          echo "========================================="
-          ./bore local 5900 --to bore.pub
+          echo "Starting bore tunnel on port 5555..."
+          ./bore local 5555 --to bore.pub
