@@ -1,4 +1,4 @@
-name: Android Emulator with VNC + Bore (Fixed)
+name: Android Emulator VNC (Fast & Stable)
 
 on:
   workflow_dispatch:
@@ -29,23 +29,23 @@ jobs:
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$HOME/android-sdk/emulator:$PATH" >> $GITHUB_ENV
 
-      - name: Install SDK packages
+      - name: Install SDK (LIGHTWEIGHT)
         run: |
           yes | sdkmanager --licenses
           sdkmanager \
             "platform-tools" \
             "emulator" \
-            "platforms;android-30" \
-            "system-images;android-30;google_apis;x86_64"
+            "platforms;android-29" \
+            "system-images;android-29;default;x86"
 
-      - name: Create AVD
+      - name: Create AVD (LIGHT DEVICE)
         run: |
           echo "no" | avdmanager create avd \
             -n test \
-            -k "system-images;android-30;google_apis;x86_64" \
-            --device "pixel"
+            -k "system-images;android-29;default;x86" \
+            --device "Nexus 5"
 
-      - name: Start virtual display + VNC
+      - name: Start VNC server
         run: |
           export DISPLAY=:1
 
@@ -56,17 +56,17 @@ jobs:
 
           x11vnc -display :1 -nopw -forever -shared -rfbport 5900 &
 
-      - name: Start emulator (stable)
+      - name: Start Emulator (FAST BOOT)
         run: |
           export DISPLAY=:1
 
           nohup emulator -avd test \
-            -gpu swiftshader_indirect \
+            -gpu off \
             -no-audio \
             -no-boot-anim \
             -accel off \
-            -memory 2048 \
-            -cores 2 \
+            -memory 1024 \
+            -cores 1 \
             -no-snapshot \
             -wipe-data > emulator.log 2>&1 &
 
@@ -74,7 +74,7 @@ jobs:
 
           echo "Waiting for boot..."
 
-          for i in {1..60}; do
+          for i in {1..50}; do
             boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             if [ "$boot" = "1" ]; then
               echo "✅ Emulator booted"
@@ -86,7 +86,7 @@ jobs:
 
           adb devices
 
-      - name: Show emulator logs (debug)
+      - name: Show logs (if needed)
         run: cat emulator.log || true
 
       - name: Install Bore
@@ -94,7 +94,9 @@ jobs:
           curl -L https://github.com/ekzhang/bore/releases/download/v0.4.0/bore-v0.4.0-x86_64-unknown-linux-musl.tar.gz | tar xz
           chmod +x bore
 
-      - name: Expose VNC via Bore
+      - name: Start Bore Tunnel (VNC)
         run: |
-          echo "Connect via VNC:"
+          echo "================================="
+          echo "📱 CONNECT USING VNC VIEWER"
+          echo "================================="
           ./bore local 5900 --to bore.pub
