@@ -21,17 +21,24 @@ jobs:
           target: google_apis
           arch: x86_64
           script: |
-            # Download VNC APK using curl (curl is available in Android)
-            adb shell curl -L -o /data/local/tmp/vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
+            # Download VNC APK on the HOST machine (not inside emulator)
+            # The action runs this script on the host, adb commands go to emulator
             
-            # Install VNC server
-            adb install /data/local/tmp/vnc.apk
+            # Wait for emulator to be fully ready
+            adb wait-for-device
+            sleep 10
+            
+            # Download VNC APK to host
+            wget -O vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
+            
+            # Install from host to emulator
+            adb install vnc.apk
             
             # Launch VNC server
             adb shell am start -n com.iiordanov.droidVNC/.MainActivity
             sleep 5
             
-            # Configure VNC password (tap coordinates for Android 11)
+            # Configure VNC password
             adb shell input tap 500 800
             sleep 1
             adb shell input text "vnc123"
