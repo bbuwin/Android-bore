@@ -1,4 +1,4 @@
-name: Android Emulator + Bore Tunnel
+name: Android Emulator with VNC + Bore (Fixed)
 
 on:
   workflow_dispatch:
@@ -9,13 +9,13 @@ jobs:
     timeout-minutes: 350
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip curl libglu1-mesa
+          sudo apt-get install -y \
+            wget unzip curl \
+            xvfb x11vnc fluxbox \
+            libglu1-mesa
 
       - name: Setup Android SDK
         run: |
@@ -32,8 +32,6 @@ jobs:
       - name: Install SDK packages
         run: |
           yes | sdkmanager --licenses
-          sdkmanager --update
-
           sdkmanager \
             "platform-tools" \
             "emulator" \
@@ -47,43 +45,56 @@ jobs:
             -k "system-images;android-30;google_apis;x86_64" \
             --device "pixel"
 
-      - name: Start emulator
+      - name: Start virtual display + VNC
         run: |
+          export DISPLAY=:1
+
+          Xvfb :1 -screen 0 1024x576x16 &
+          sleep 2
+
+          fluxbox &
+
+          x11vnc -display :1 -nopw -forever -shared -rfbport 5900 &
+
+      - name: Start emulator (stable)
+        run: |
+          export DISPLAY=:1
+
           nohup emulator -avd test \
-            -no-window \
+            -gpu swiftshader_indirect \
             -no-audio \
             -no-boot-anim \
-            -gpu off \
             -accel off \
-            -netdelay none \
-            -netspeed full > emulator.log 2>&1 &
+            -memory 2048 \
+            -cores 2 \
+            -no-snapshot \
+            -wipe-data > emulator.log 2>&1 &
 
           adb wait-for-device
 
-          echo "Waiting for full boot..."
-          boot_completed=""
-          until [[ "$boot_completed" == "1" ]]; do
-            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+          echo "Waiting for boot..."
+
+          for i in {1..60}; do
+            boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$boot" = "1" ]; then
+              echo "✅ Emulator booted"
+              break
+            fi
+            echo "⏳ Booting... ($i)"
             sleep 5
           done
 
-          echo "Emulator booted!"
-
           adb devices
 
-      - name: Enable ADB over TCP
-        run: |
-          adb tcpip 5555
-          sleep 3
-          adb connect localhost:5555
-          adb devices
+      - name: Show emulator logs (debug)
+        run: cat emulator.log || true
 
       - name: Install Bore
         run: |
           curl -L https://github.com/ekzhang/bore/releases/download/v0.4.0/bore-v0.4.0-x86_64-unknown-linux-musl.tar.gz | tar xz
           chmod +x bore
 
-      - name: Start Bore tunnel
+      - name: Expose VNC via Bore
         run: |
-          echo "Starting bore tunnel on port 5555..."
-          ./bore local 5555 --to bore.pub
+          echo "Connect via VNC:"
+          ./bore local 5900 --to bore.pub
