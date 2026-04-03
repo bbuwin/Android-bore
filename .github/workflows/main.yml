@@ -21,16 +21,28 @@ jobs:
           target: google_apis
           arch: x86_64
           script: |
-            # Install VNC server on emulator
-            adb shell wget -O /data/local/tmp/vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
+            # Download VNC APK using curl (curl is available in Android)
+            adb shell curl -L -o /data/local/tmp/vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
+            
+            # Install VNC server
             adb install /data/local/tmp/vnc.apk
+            
+            # Launch VNC server
             adb shell am start -n com.iiordanov.droidVNC/.MainActivity
             sleep 5
+            
+            # Configure VNC password (tap coordinates for Android 11)
             adb shell input tap 500 800
+            sleep 1
             adb shell input text "vnc123"
+            sleep 1
             adb shell input tap 500 900
+            sleep 1
             adb shell input tap 300 1000
-            echo "VNC server running on port 5900"
+            
+            echo "✅ VNC server running on port 5900"
+            
+            # Keep emulator alive
             while true; do sleep 300; done
 
       - name: Setup Bore Tunnel
@@ -38,10 +50,15 @@ jobs:
           wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           chmod +x bore
+          
+          echo ""
           echo "========================================="
           echo "✅ ANDROID EMULATOR READY"
           echo "========================================="
-          echo "Connect via VNC Viewer to: bore.pub:XXXXX"
-          echo "Password: vnc123"
+          echo "📡 Look for: listening at bore.pub:XXXXX"
+          echo "🔑 VNC Password: vnc123"
+          echo ""
+          echo "📱 Connect using VNC Viewer app"
           echo "========================================="
+          
           ./bore local 5900 --to bore.pub
