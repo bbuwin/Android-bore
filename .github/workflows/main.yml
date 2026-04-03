@@ -1,4 +1,4 @@
-name: Android Emulator with Bore
+name: Android Emulator with Bore (F-Droid)
 
 on:
   workflow_dispatch:
@@ -25,8 +25,8 @@ jobs:
             adb wait-for-device
             sleep 15
             
-            # Download VNC APK (using working URL)
-            wget -O vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
+            # Download VNC APK from F-Droid (official mirror)
+            wget -O vnc.apk "https://f-droid.org/repo/net.christianbeier.droidvnc_ng_2.9.3.apk"
             
             # Install VNC
             adb install vnc.apk
@@ -44,9 +44,7 @@ jobs:
             sleep 1
             adb shell input tap 300 1000
             
-            echo "✅ VNC ready on port 5900"
-            
-            # Keep alive
+            echo "✅ VNC ready"
             while true; do sleep 300; done
 
       - name: Install Bore
@@ -61,7 +59,6 @@ jobs:
           echo "📱 ANDROID EMULATOR READY"
           echo "========================================="
           echo "🔑 VNC Password: vnc123"
-          echo ""
-          echo "📡 Your Bore address:"
+          echo "📡 Bore address will appear below:"
           echo "========================================="
           ./bore local 5900 --to bore.pub
