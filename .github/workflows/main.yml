@@ -20,39 +20,28 @@ jobs:
           api-level: 30
           target: google_apis
           arch: x86_64
-          profile: Pixel 4
           script: |
             # Install VNC server on emulator
             adb shell wget -O /data/local/tmp/vnc.apk https://github.com/bk138/droidVNC-NG/releases/download/v1.4.0/droidVNC-NG_v1.4.0.apk
             adb install /data/local/tmp/vnc.apk
             adb shell am start -n com.iiordanov.droidVNC/.MainActivity
             sleep 5
-            
-            # Configure VNC password
             adb shell input tap 500 800
             adb shell input text "vnc123"
             adb shell input tap 500 900
             adb shell input tap 300 1000
-            
             echo "VNC server running on port 5900"
-            
-            # Keep emulator alive
             while true; do sleep 300; done
 
-      - name: Download and Run Bore
+      - name: Setup Bore Tunnel
         run: |
           wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           tar -xzf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
           chmod +x bore
-          
           echo "========================================="
-          echo "📱 ANDROID EMULATOR READY"
+          echo "✅ ANDROID EMULATOR READY"
           echo "========================================="
-          echo "Username: runneradmin"
+          echo "Connect via VNC Viewer to: bore.pub:XXXXX"
           echo "Password: vnc123"
-          echo ""
-          echo "Look for: bore.pub:XXXXX in the logs above"
-          echo "Connect using VNC Viewer app"
           echo "========================================="
-          
           ./bore local 5900 --to bore.pub
