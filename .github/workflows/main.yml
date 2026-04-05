@@ -27,7 +27,7 @@ jobs:
       - name: Run Emulator & Install APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 32              # ✅ Changed from 30 to 32 (Android 12)
+          api-level: 32
           target: google_apis
           arch: x86_64
           profile: Nexus 6
@@ -35,7 +35,15 @@ jobs:
           script: |
             adb wait-for-device
             adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+            
+            # Remove pre-installed YouTube
+            adb uninstall com.google.android.youtube || true
+            
+            # Install your APK
             adb install app.apk
+            
+            # Launch the app
             PACKAGE=$(aapt dump badging app.apk | grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g)
             adb shell monkey -p $PACKAGE 1
+            
             sleep 3600
