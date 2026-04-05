@@ -1,46 +1,43 @@
 name: Android Emulator with APK
 
 on:
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      apk_url:
-        description: 'URL to APK file'
-        required: true
-        default: 'https://pixeldrain.dev/api/file/2PKBcfDv'
 
 jobs:
-  run-emulator:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: macos-latest
     
     steps:
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+      - uses: actions/checkout@v4
       
-      - name: Download APK
-        run: |
-          wget -O app.apk "${{ github.event.inputs.apk_url }}"
-          ls -lh app.apk
-      
-      - name: Run Emulator & Install APK
+      - name: Android Emulator Runner
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 32
-          target: aosp              # ✅ Changed from google_apis to aosp (no Google apps)
+          api-level: 31
+          target: default  # No YouTube preinstalled
           arch: x86_64
           profile: Nexus 6
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
+          emulator-options: -no-snapshot -no-window -no-audio -gpu swiftshader_indirect
           script: |
-            adb wait-for-device
-            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+            # Check if APK exists
+            if [ ! -f "app.apk" ]; then
+              echo "ERROR: app.apk not found"
+              exit 1
+            fi
             
-            # Install APK (no YouTube to conflict with!)
+            # Install APK
             adb install app.apk
             
-            # Launch the app
-            PACKAGE=$(aapt dump badging app.apk | grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g)
-            adb shell monkey -p $PACKAGE 1
+            # Get package name (using aapt2 if available)
+            PACKAGE_NAME=$(adb shell pm list packages | tail -1 | cut -d':' -f2)
+            echo "Installed package: $PACKAGE_NAME"
             
-            sleep 3600
+            # Launch app
+            MONKEY_OUTPUT=$(adb shell monkey -p $PACKAGE_NAME 1 2>&1)
+            if echo "$MONKEY_OUTPUT" | grep -q "Events injected"; then
+              echo "✅ App launched successfully"
+            else
+              echo "⚠️ Could not launch, but APK installed"
+            fi
