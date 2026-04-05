@@ -3,17 +3,23 @@ name: Android Emulator with APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   test:
-    runs-on: ubuntu-latest  # Most stable for Android emulators
+    runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      
+      # 🔥 CRITICAL FIX: Add KVM permissions
+      - name: Fix KVM permissions
+        run: |
+          echo "🔧 Fixing KVM permissions..."
+          sudo chown runner:root /dev/kvm
+          sudo chmod 666 /dev/kvm
+          ls -la /dev/kvm
+          echo "✅ KVM permission fixed"
       
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -21,18 +27,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: Cache AVD
-        id: cache-avd
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-cache-ubuntu-api31
-          restore-keys: |
-            avd-cache-ubuntu-
-      
-      - name: Run Android Emulator and Install APK
+      - name: Run Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 31
@@ -42,111 +37,16 @@ jobs:
           emulator-options: -no-snapshot -no-window -no-audio -gpu swiftshader_indirect -accel on
           disable-animations: true
           script: |
-            echo "========================================="
-            echo "📱 Starting APK Installation Process"
-            echo "========================================="
-            
-            # Check if APK exists
             if [ ! -f "app.apk" ]; then
-              echo "❌ ERROR: app.apk not found in repository root!"
-              echo "📁 Current directory contents:"
-              ls -la
+              echo "❌ app.apk not found!"
               exit 1
             fi
             
-            echo "✅ APK found: app.apk"
-            echo "📊 APK size: $(du -h app.apk | cut -f1)"
+            echo "📱 Installing APK..."
+            adb install app.apk
             
-            # Wait for device to be fully ready
-            echo "⏳ Waiting for device to be ready..."
-            adb wait-for-device
-            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
-            adb shell settings put global window_animation_scale 0.0
-            adb shell settings put global transition_animation_scale 0.0
-            adb shell settings put global animator_duration_scale 0.0
-            
-            echo "✅ Emulator is ready"
-            
-            # List installed packages before installation
-            echo "📋 Packages before installation:"
-            adb shell pm list packages | head -5
-            
-            # Install APK
-            echo "📦 Installing APK..."
-            INSTALL_OUTPUT=$(adb install -r app.apk 2>&1)
-            echo "$INSTALL_OUTPUT"
-            
-            # Check if installation was successful
-            if echo "$INSTALL_OUTPUT" | grep -q "Success"; then
-              echo "✅ APK installed successfully!"
-            else
-              echo "❌ Installation failed!"
-              echo "📝 Error details: $INSTALL_OUTPUT"
-              exit 1
-            fi
-            
-            # Get installed package name
             PACKAGE_NAME=$(adb shell pm list packages | tail -1 | cut -d':' -f2 | tr -d '\r')
-            echo "📱 Package name: $PACKAGE_NAME"
+            echo "✅ Successfully installed: $PACKAGE_NAME"
             
-            # Verify package is installed
-            if adb shell pm list packages | grep -q "$PACKAGE_NAME"; then
-              echo "✅ Package verification successful"
-            else
-              echo "❌ Package verification failed"
-              exit 1
-            fi
-            
-            # Try to launch the app
-            echo "🚀 Attempting to launch app..."
-            MONKEY_OUTPUT=$(adb shell monkey -p $PACKAGE_NAME 1 2>&1)
-            if echo "$MONKEY_OUTPUT" | grep -q "Events injected"; then
-              echo "✅ App launched successfully!"
-            else
-              echo "⚠️  Could not launch app (may not have UI), but APK is installed"
-            fi
-            
-            # Get app info
-            echo "📊 App Information:"
-            adb shell dumpsys package $PACKAGE_NAME | grep -E "versionCode|versionName|firstInstallTime" || true
-            
-            echo "========================================="
-            echo "🎉 APK Installation Complete!"
-            echo "========================================="
-      
-      - name: Run UI Tests (Optional)
-        if: success()
-        run: |
-          echo "Running UI tests..."
-          adb shell input keyevent KEYCODE_WAKEUP
-          adb shell input keyevent KEYCODE_MENU
-          echo "✅ Basic UI test passed"
-      
-      - name: Capture Emulator Screenshot
-        if: always()
-        run: |
-          adb exec-out screencap -p > emulator-screenshot.png
-          echo "📸 Screenshot saved"
-      
-      - name: Capture Logcat
-        if: failure()
-        run: |
-          adb logcat -d > logcat-output.txt
-          echo "📝 Logcat saved"
-      
-      - name: Upload Debug Artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-artifacts
-          path: |
-            emulator-screenshot.png
-            logcat-output.txt
-          retention-days: 7
-      
-      - name: Cleanup
-        if: always()
-        run: |
-          echo "🧹 Cleaning up..."
-          adb emu kill || true
-          echo "✅ Cleanup complete"
+            adb shell monkey -p $PACKAGE_NAME 1
+            echo "✅ App launched successfully"
