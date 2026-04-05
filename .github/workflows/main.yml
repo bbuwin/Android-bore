@@ -28,7 +28,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 32
-          target: google_apis
+          target: aosp              # ✅ Changed from google_apis to aosp (no Google apps)
           arch: x86_64
           profile: Nexus 6
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
@@ -36,10 +36,7 @@ jobs:
             adb wait-for-device
             adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
             
-            # Remove pre-installed YouTube
-            adb uninstall com.google.android.youtube || true
-            
-            # Install your APK
+            # Install APK (no YouTube to conflict with!)
             adb install app.apk
             
             # Launch the app
