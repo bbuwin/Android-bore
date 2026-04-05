@@ -12,14 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 🔥 CRITICAL FIX: Add KVM permissions
       - name: Fix KVM permissions
         run: |
-          echo "🔧 Fixing KVM permissions..."
           sudo chown runner:root /dev/kvm
           sudo chmod 666 /dev/kvm
-          ls -la /dev/kvm
-          echo "✅ KVM permission fixed"
       
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -37,6 +33,7 @@ jobs:
           emulator-options: -no-snapshot -no-window -no-audio -gpu swiftshader_indirect -accel on
           disable-animations: true
           script: |
+            # Check if APK exists
             if [ ! -f "app.apk" ]; then
               echo "❌ app.apk not found!"
               exit 1
