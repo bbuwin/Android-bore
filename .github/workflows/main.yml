@@ -19,15 +19,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       
-      - name: Install aapt (Android Asset Packaging Tool)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y aapt
-      
       - name: Download APK
         run: |
           wget -O app.apk "${{ github.event.inputs.apk_url }}"
-          ls -lh app.apk  # Verify download worked
+          ls -lh app.apk
       
       - name: Run Emulator & Install APK
         uses: reactivecircus/android-emulator-runner@v2
@@ -36,24 +31,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: Nexus 6
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-accel
-          emulator-build: 30.0.16  # Stable emulator version
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
           script: |
             adb wait-for-device
             adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
-            adb shell settings put global window_animation_scale 0
-            adb shell settings put global transition_animation_scale 0
-            
             adb install app.apk
-            
-            # Alternative way to get package name if aapt fails
-            PACKAGE=$(aapt dump badging app.apk 2>/dev/null | grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g)
-            if [ -z "$PACKAGE" ]; then
-              echo "aapt failed, trying alternative method..."
-              PACKAGE=$(adb shell pm list packages -3 | head -1 | cut -d':' -f2)
-            fi
-            
-            echo "Launching package: $PACKAGE"
+            PACKAGE=$(aapt dump badging app.apk | grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g)
             adb shell monkey -p $PACKAGE 1
-            
             sleep 3600
