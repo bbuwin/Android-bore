@@ -27,7 +27,7 @@ jobs:
       - name: Run Emulator & Install APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 32              # ✅ Changed from 30 to 32 (Android 12)
           target: google_apis
           arch: x86_64
           profile: Nexus 6
