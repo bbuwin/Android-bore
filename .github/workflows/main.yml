@@ -1,102 +1,49 @@
-name: Android Emulator VNC (Fast & Stable)
+name: Android Emulator with APK
 
 on:
   workflow_dispatch:
+    inputs:
+      apk_url:
+        description: 'URL to APK file'
+        required: true
+        default: 'https://example.com/app.apk'
 
 jobs:
-  emulator:
+  run-emulator:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-
+    
     steps:
-      - name: Install dependencies
+      - name: Enable KVM
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            wget unzip curl \
-            xvfb x11vnc fluxbox \
-            libglu1-mesa
-
-      - name: Setup Android SDK
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      
+      - name: Download APK
         run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk
-
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-*.zip -d cmdline-tools
-          mv cmdline-tools/cmdline-tools cmdline-tools/latest
-
-          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$HOME/android-sdk/emulator:$PATH" >> $GITHUB_ENV
-
-      - name: Install SDK (LIGHTWEIGHT)
-        run: |
-          yes | sdkmanager --licenses
-          sdkmanager \
-            "platform-tools" \
-            "emulator" \
-            "platforms;android-29" \
-            "system-images;android-29;default;x86"
-
-      - name: Create AVD (LIGHT DEVICE)
-        run: |
-          echo "no" | avdmanager create avd \
-            -n test \
-            -k "system-images;android-29;default;x86" \
-            --device "Nexus 5"
-
-      - name: Start VNC server
-        run: |
-          export DISPLAY=:1
-
-          Xvfb :1 -screen 0 1024x576x16 &
-          sleep 2
-
-          fluxbox &
-
-          x11vnc -display :1 -nopw -forever -shared -rfbport 5900 &
-
-      - name: Start Emulator (FAST BOOT)
-        run: |
-          export DISPLAY=:1
-
-          nohup emulator -avd test \
-            -gpu off \
-            -no-audio \
-            -no-boot-anim \
-            -accel off \
-            -memory 1024 \
-            -cores 1 \
-            -no-snapshot \
-            -wipe-data > emulator.log 2>&1 &
-
-          adb wait-for-device
-
-          echo "Waiting for boot..."
-
-          for i in {1..50}; do
-            boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            if [ "$boot" = "1" ]; then
-              echo "✅ Emulator booted"
-              break
-            fi
-            echo "⏳ Booting... ($i)"
-            sleep 5
-          done
-
-          adb devices
-
-      - name: Show logs (if needed)
-        run: cat emulator.log || true
-
-      - name: Install Bore
-        run: |
-          curl -L https://github.com/ekzhang/bore/releases/download/v0.4.0/bore-v0.4.0-x86_64-unknown-linux-musl.tar.gz | tar xz
-          chmod +x bore
-
-      - name: Start Bore Tunnel (VNC)
-        run: |
-          echo "================================="
-          echo "📱 CONNECT USING VNC VIEWER"
-          echo "================================="
-          ./bore local 5900 --to bore.pub
+          wget -O app.apk "${{ github.event.inputs.apk_url }}"
+      
+      - name: Run Emulator & Install APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: Pixel 4
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
+          script: |
+            # Wait for device
+            adb wait-for-device
+            
+            # Wait for full boot
+            adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+            
+            # Install APK
+            adb install app.apk
+            
+            # Get package name and launch
+            PACKAGE=$(aapt dump badging app.apk | grep package | awk '{print $2}' | sed s/name=//g | sed s/\'//g)
+            adb shell monkey -p $PACKAGE 1
+            
+            # Keep alive for 1 hour (change this if you need longer)
+            sleep 3600
